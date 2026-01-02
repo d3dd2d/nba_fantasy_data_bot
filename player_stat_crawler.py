@@ -2,14 +2,15 @@ import argparse
 import json
 import os
 import time
+from pathlib import Path
 
 import pandas as pd
 from selenium import webdriver  # type: ignore
 from selenium.webdriver.chrome.options import Options  # type: ignore
 from selenium.webdriver.common.by import By  # type: ignore
+from selenium.webdriver.support import expected_conditions as EC  # type: ignore
 from selenium.webdriver.support.ui import Select  # type: ignore
 from selenium.webdriver.support.ui import WebDriverWait  # type: ignore
-from selenium.webdriver.support import expected_conditions as EC  # type: ignore
 from unidecode import unidecode  # type: ignore
 
 
@@ -17,20 +18,19 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        '-t', '--data-type', 
-        type=int, 
-        default=1, 
-        help='data type (default: 1, can be [0, 1, 7, 14, 30])'
+        "-t",
+        "--data-type",
+        type=int,
+        default=1,
+        help="data type (default: 1, can be [0, 1, 7, 14, 30])",
     )
 
     parser.add_argument(
-        '-d', '--date', 
-        type=str, 
-        default=20260000, 
-        help='date in format like 20260101'
+        "-d", "--date", type=str, default=20260000, help="date in format like 20260101"
     )
 
     return parser.parse_args()
+
 
 args = parse_arguments()
 
@@ -40,11 +40,12 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 
-cookie_str = os.getenv('FANTASY_HASHTAG_COOKIES')
+cookie_str = os.getenv("FANTASY_HASHTAG_COOKIES")
 
 # Reference data type, can be [0, 1, 7, 14, 30]
 DATA_TYPE = args.data_type
 DATE = args.date
+
 
 def get_history_data(data_type):
     driver = webdriver.Chrome(options=chrome_options)
@@ -54,13 +55,13 @@ def get_history_data(data_type):
         cookies = json.loads(cookie_str)
         for cookie in cookies:
             cookie_dict = {
-                'name': cookie['name'],
-                'value': cookie['value'],
-                'domain': cookie.get('domain'), 
-                'path': cookie.get('path', '/'),
+                "name": cookie["name"],
+                "value": cookie["value"],
+                "domain": cookie.get("domain"),
+                "path": cookie.get("path", "/"),
             }
             driver.add_cookie(cookie_dict)
-        
+
         print("import cookie success")
     except Exception as e:
         print(f"import cookie error: {e}")
@@ -149,8 +150,15 @@ def format_history_data(stats_table):
 
 
 def store_table(history_data, pkl_file_name):
-    history_data.to_pickle(f".\\history_data\\{pkl_file_name}.pkl")
-    history_data.to_csv(f".\\history_data\\{pkl_file_name}.csv")
+    for file_type in ["pkl", "csv"]:
+        date_path = Path("history_data") / f"{pkl_file_name}.{file_type}"
+        current_path = Path("history_data") / f"current_{DATA_TYPE}.{file_type}"
+        if file_type == "pkl":
+            history_data.to_pickle(date_path)
+            history_data.to_pickle(current_path)
+        else:
+            history_data.to_csv(date_path)
+            history_data.to_csv(current_path)
 
 
 if __name__ == "__main__":

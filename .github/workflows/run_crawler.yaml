@@ -28,10 +28,6 @@ jobs:
           TODAY=$(date +'%Y%m%d')
           python player_stat_crawler.py -t 0 -d ${TODAY}
           python player_stat_crawler.py -t 1 -d ${TODAY}
-          cp .\\history_data\\${TODAY}_0.csv .\\history_data\\current_0.csv
-          cp .\\history_data\\${TODAY}_0.pkl .\\history_data\\current_0.pkl
-          cp .\\history_data\\${TODAY}_1.csv .\\history_data\\current_1.csv
-          cp .\\history_data\\${TODAY}_1.pkl .\\history_data\\current_1.pkl
 
       - name: Commit data to Git (Commit & Push)
         run: |

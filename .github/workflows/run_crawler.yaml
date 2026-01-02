@@ -1,0 +1,39 @@
+name: NBA Fantasy Auto-Runner
+
+on:
+  workflow_dispatch:  # allow manual testing
+  schedule:
+    - cron: '0 9 * * *' # run on UTC 09:00 every day
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download code (Checkout)
+        uses: actions/checkout@v3
+
+      - name: Set Python env.
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install packages
+        run: pip install -r requirements.txt
+
+      - name: Execute python script
+        env:
+          FANTASY_HASHTAG_COOKIES: ${{ secrets.FANTASY_HASHTAG_COOKIES }}
+        run: |
+          python player_stat_crawler.py -t 0 -d $(date +'%Y%m%d')
+          python player_stat_crawler.py -t 1 -d $(date +'%Y%m%d')
+
+      - name: Commit data to Git (Commit & Push)
+        run: |
+          git config --global user.name "FantasyBot"
+          git config --global user.email "bot@github.com"
+          git add *.csv
+          git add *.pkl
+          timestamp=$(date -u)
+          git commit -m "Auto-update data: ${timestamp}" || exit 0
+          git push

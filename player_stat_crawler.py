@@ -154,10 +154,10 @@ def store_table(history_data, pkl_file_name):
         date_path = Path("history_data") / f"{pkl_file_name}.{file_type}"
         current_path = Path("history_data") / f"current_{DATA_TYPE}.{file_type}"
         if file_type == "pkl":
-            history_data.to_pickle(date_path)
+            # history_data.to_pickle(date_path)
             history_data.to_pickle(current_path)
         else:
-            history_data.to_csv(date_path)
+            # history_data.to_csv(date_path)
             history_data.to_csv(current_path)
 
 

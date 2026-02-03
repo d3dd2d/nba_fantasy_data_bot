@@ -1,3 +1,5 @@
-selenium
+streamlit
 pandas
+selenium
 unidecode
+espn_api

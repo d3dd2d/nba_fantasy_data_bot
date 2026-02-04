@@ -280,7 +280,7 @@ def show_matchup_results():
             
             if selected_team1 and selected_team2:
                 # 3. Fetch Matchups (Box Scores)
-                box_scores = league.box_scores(matchup_period=week_num, scoring_period=1)
+                box_scores = league.box_scores(matchup_period=week_num)
                 
                 # Helper to find team data in box scores
                 def get_team_data_from_box_scores(t_name, b_scores):

@@ -421,7 +421,7 @@ def show_matchup_results():
                     # --- Roster & Schedule Section ---
                     st.markdown("---")
                     st.subheader("Prediction Calculator")
-                    st.caption("選取未來會進行的比賽，已經結束的請取消選取，最上面一排可以全選。\n\n數據更新時間為美西時間午夜12點。(16:00 UTC+8)\n\n另外有時候按第一次框框會沒反應，請再按一次!")
+                    st.caption("選取未來預計會進行的比賽，預計不會上場的請取消勾選。\n\n數據更新時間為美西時間午夜12點。(16:00 UTC+8)\n\n另外有時候按第一次框框會沒反應，請再按一次!")
 
                     # Load Stats for Projections
                     stats_map = get_player_stats_map(os.path.dirname(__file__), stats_file)

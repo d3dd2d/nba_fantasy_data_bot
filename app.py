@@ -13,6 +13,7 @@ from utils import (
     NAME_MAPPING,
     TEAM_ABBREVIATION_MAPPING
 )
+from get_week_range import find_week_range
 
 # Constants for ESPN API (Loaded from secrets)
 LEAGUE_ID = st.secrets["LEAGUE_ID"]
@@ -249,14 +250,34 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
 def show_matchup_results():
     st.header("Matchup Results")
     
-    # 1. Select Week
+    # Select Week
     weeks = get_available_weeks()
     if not weeks:
         st.warning("No weekly schedule files found.")
         return
-        
-    # Default to the last week (largest number)
-    default_week_idx = len(weeks) - 1 if weeks else 0
+
+    # Calculate Current PT Date & Defaults
+    now_pt = pd.Timestamp.now(tz='US/Pacific')
+    current_date = now_pt.date()
+    season_start = pd.Timestamp("2025-10-20").date()
+    
+    # Calculate Scoring Period (Days since start)
+    # User requested sp_num = date difference between current day and 2025/10/20
+    scoring_period = (current_date - season_start).days
+    
+    # Identify Current Week
+    # find_week_range generally expects a datetime or timestamp, let's pass the normalized timestamp or date
+    # In get_week_range.py, it compares vs pd.to_datetime values. Safe to pass pd.Timestamp.
+    current_week_str = find_week_range(pd.Timestamp(current_date))
+    
+    # Determine Default Index
+    default_week_idx = 0
+    if current_week_str in weeks:
+        default_week_idx = weeks.index(current_week_str)
+    elif weeks:
+        # Fallback to last week if current not found (e.g. offseason or future)
+        default_week_idx = len(weeks) - 1
+
     selected_week_str = st.selectbox("Select Week:", weeks, index=default_week_idx)
     week_num = int(selected_week_str[1:])
     
@@ -280,7 +301,8 @@ def show_matchup_results():
             
             if selected_team1 and selected_team2:
                 # 3. Fetch Matchups (Box Scores)
-                box_scores = league.box_scores(matchup_period=week_num)
+                # Use calculated scoring_period as requested
+                box_scores = league.box_scores(matchup_period=week_num, scoring_period=scoring_period)
                 
                 # Helper to find team data in box scores
                 def get_team_data_from_box_scores(t_name, b_scores):

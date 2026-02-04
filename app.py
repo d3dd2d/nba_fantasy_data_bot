@@ -14,6 +14,7 @@ from utils import (
     TEAM_ABBREVIATION_MAPPING
 )
 from get_week_range import find_week_range
+from datetime import datetime
 
 # Constants for ESPN API (Loaded from secrets)
 LEAGUE_ID = st.secrets["LEAGUE_ID"]
@@ -195,13 +196,52 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
     n_rows = len(st.session_state[ss_key])
     height = (n_rows + 1) * 35 + 3
 
+    # Filter Columns: Hide Past Dates
+    # Current PT Date
+    now_pt = pd.Timestamp.now(tz='US/Pacific')
+    current_date = now_pt.date()
+    
+    # Identify columns to show
+    all_cols = st.session_state[ss_key].columns
+    date_cols = [c for c in all_cols if c not in ['Player', 'Pos', 'Team']]
+    
+    future_cols = []
+    for d_str in date_cols:
+        try:
+            # Parse header "Jan 26". Assume SEASON_YEAR logic.
+            # Split month/day
+            parts = d_str.split()
+            if len(parts) == 2:
+                month_str, day_str = parts
+                # Simple mapping or datetime parse
+                # 2026 Season: Oct-Dec=2025, Jan-Apr=2026
+                dt_temp = datetime.strptime(d_str, "%b %d")
+                
+                # Determine Year
+                if dt_temp.month >= 10:
+                    year = SEASON_YEAR - 1
+                else:
+                    year = SEASON_YEAR
+                
+                col_date = dt_temp.replace(year=year).date()
+                
+                if col_date >= current_date:
+                    future_cols.append(d_str)
+        except:
+             # If parse fails, keep it to be safe
+             future_cols.append(d_str)
+
+    # Define visible dataframe
+    visible_cols = ['Player', 'Pos', 'Team'] + future_cols
+    df_visible = st.session_state[ss_key][visible_cols]
+
     # Define editor key explicitly to control state
     # Use version to force re-render when needed
     editor_key = f"editor_{side_key}_{week_num}_v{st.session_state[version_key]}"
     
     # Render Editor
     edited_df = st.data_editor(
-        st.session_state[ss_key], 
+        df_visible, 
         hide_index=True, 
         column_config={
             "Player": st.column_config.TextColumn(disabled=True),
@@ -224,19 +264,31 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
              edited_df = apply_batch_toggle(edited_df, d, curr_row0[d])
              cols_changed.append(d)
     
-    # Save State
-    st.session_state[ss_key] = edited_df
-    st.session_state[last_known_key] = edited_df.copy()
+    # Update Session State (Merge changes back to full DF)
+    # We must allow the full df to persist, but update the modified columns
+    full_df = st.session_state[ss_key].copy()
+    for col in edited_df.columns:
+        full_df[col] = edited_df[col]
+    
+    st.session_state[ss_key] = full_df
+    
+    # Update Last Known (for diffing next time)
+    # We need to respect that visible cols might change day-to-day
+    # But last_known should match the structure of next render??
+    # Actually, simplest is to just sync it.
+    st.session_state[last_known_key] = full_df.copy()
 
     # Rerun if programmatic change occurred to update UI
     if cols_changed:
         st.rerun()
     
     # Enforce No-Game Constraint (Active Reversion)
-    edited_df, reverted = enforce_no_game_constraints(edited_df, df_schedule)
+    # Pass ONLY visible portion or full? Enforce on full helps consistency.
+    full_df, reverted = enforce_no_game_constraints(full_df, df_schedule)
+    
     if reverted:
-        st.session_state[ss_key] = edited_df
-        st.session_state[last_known_key] = edited_df.copy()
+        st.session_state[ss_key] = full_df
+        st.session_state[last_known_key] = full_df.copy()
         
         # Increment version to rotate key and force fresh render
         st.session_state[version_key] += 1

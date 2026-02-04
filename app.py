@@ -14,11 +14,11 @@ from utils import (
     TEAM_ABBREVIATION_MAPPING
 )
 
-# Constants for ESPN API
-LEAGUE_ID = 530116861
-SEASON_YEAR = 2026
-ESPN_S2_TOKEN = "AECah9%2Bjw3xO%2FHk3Py8N2MwKodVGckvlnfGY5m4EMhLSlU8ZQaK6L6KMxJSZXl1qNPqkb3n2Z%2B5ws5w3gGnqkv9tCmR711S%2FqZkeAvfEH9M9eKE6nCNF1B%2BejNeSzJ0tfSNPyPNoN%2FkSllXLNRryK0QkzAh0Pg3k2EiXYZzAzKozSBOK1MlgjX9TRu8fl8Wb9zAvuXR19OSnHVfEoyNoU%2FpyiB3OGMEQWAba84SM8BfSkjSO6n6i62BLN9YwNZZLxG1lXfWVcUCLu%2FwwbYnEA%2BzUTs6J%2BNstQMhm5Kx2Pw9JDns6QXWgv85U3kFb1pqCxIJYTF%2BQYFCLqUX%2BlIhhN6FN"
-SWID_TOKEN = "{7CD0E8AA-FBC6-4771-9395-B663DBB7B231}"
+# Constants for ESPN API (Loaded from secrets)
+LEAGUE_ID = st.secrets["LEAGUE_ID"]
+SEASON_YEAR = st.secrets["SEASON_YEAR"]
+ESPN_S2_TOKEN = st.secrets["ESPN_S2_TOKEN"]
+SWID_TOKEN = st.secrets["SWID_TOKEN"]
 
 def get_pickle_files(directory):
     """
@@ -304,7 +304,7 @@ def show_matchup_results():
                     desired_order = ['AFG%', 'FT%', '3PM', 'TREB', 'AST', 'STL', 'BLK', 'TO', 'PTS', 'FGM', 'FGA', 'FTM', 'FTA']
                     
                     # Map user 'Display Names' to potential 'API Keys'
-                    aliases = {'REB': 'TREB'}
+                    aliases = {'TREB': 'REB'}
                     
                     # Build Comparison Table
                     t1_row = {}

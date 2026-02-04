@@ -9,3 +9,4 @@ env/
 secrets.json
 cookies.json
 *.log
+.streamlit/secrets.toml

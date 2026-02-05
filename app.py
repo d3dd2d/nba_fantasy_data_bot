@@ -340,7 +340,8 @@ def show_matchup_results():
             # 2. Select Teams (Independent)
             # We need team list. League object has it.
             teams = league.teams
-            team_names = [team.team_name for team in teams]
+            team_map = {team.team_name: team for team in teams}
+            team_names = list(team_map.keys())
             
             col1, col2 = st.columns(2)
             with col1:
@@ -365,8 +366,17 @@ def show_matchup_results():
                     return None, None
 
                 t1_obj, t1_stats = get_team_data_from_box_scores(selected_team1, box_scores)
+                if not t1_obj:
+                    # Fallback to general team object if not in box scores
+                    t1_obj = team_map.get(selected_team1)
+                    t1_stats = {}
+
                 t2_obj, t2_stats = get_team_data_from_box_scores(selected_team2, box_scores)
+                if not t2_obj:
+                    t2_obj = team_map.get(selected_team2)
+                    t2_stats = {}
                 
+                # Proceed even if stats are empty (t1_obj/t2_obj strictly shouldn't be None due to selectbox)
                 if t1_obj and t2_obj:
                     st.subheader(f"Comparison: {t1_obj.team_name} vs {t2_obj.team_name}")
                     
@@ -455,9 +465,6 @@ def show_matchup_results():
                         st.markdown("---")
                         st.subheader("Prediction Stats (Final Projected)")
                         st.table(df_pred)
-                
-                else:
-                     st.warning("Could not find data for one or both selected teams in this week's box scores.")
 
     except Exception as e:
         st.error(f"Error fetching matchup data: {e}")

@@ -232,7 +232,7 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
              future_cols.append(d_str)
 
     # Define visible dataframe
-    visible_cols = ['Player', 'Pos', 'Team'] + future_cols
+    visible_cols = ['Player', 'Team'] + future_cols
     df_visible = st.session_state[ss_key][visible_cols]
 
     # Define editor key explicitly to control state
@@ -245,7 +245,6 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
         hide_index=True, 
         column_config={
             "Player": st.column_config.TextColumn(disabled=True),
-            "Pos": st.column_config.TextColumn(disabled=True),
             "Team": st.column_config.TextColumn(disabled=True)
         },
         key=editor_key,

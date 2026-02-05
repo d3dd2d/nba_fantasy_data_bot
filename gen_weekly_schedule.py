@@ -102,30 +102,24 @@ def scrape_week(week_name, start_date, end_date):
     print(f"  Saved {pkl_path}")
     return schedule_table
 
+import argparse
+
 def main():
-    # US/Pacific time for decision making
-    now_pt = pd.Timestamp.now(tz='US/Pacific')
-    today_date = now_pt.date()
+    parser = argparse.ArgumentParser(description="Generate weekly schedule for a specific week.")
+    parser.add_argument("-w", "--week", type=str, required=True, help="Week number (e.g., '17' or 'w17')")
+    args = parser.parse_args()
     
-    # Iterate through all weeks in schedule
-    # schedule is dict: 'w1': (start, end)
+    # Normalize input "17" -> "w17"
+    week_input = args.week if args.week.startswith('w') else f"w{args.week}"
     
-    # Sort weeks by number to process in order
-    sorted_weeks = sorted(schedule.keys(), key=lambda x: int(x[1:]))
-    
-    for week_name in sorted_weeks:
-        start_date, end_date = schedule[week_name]
+    if week_input not in schedule:
+        print(f"Error: Week '{week_input}' not found in schedule config.")
+        print(f"Available weeks: {', '.join(list(schedule.keys())[:5])}...")
+        sys.exit(1)
         
-        # Convert pandas timestamps to date
-        s_date = start_date.date()
-        e_date = end_date.date()
-        
-        # Process if the week ends today or in the future
-        # (This ensures we update the current running week + all future weeks)
-        if e_date >= today_date:
-            scrape_week(week_name, start_date, end_date)
-        else:
-            print(f"Skipping {week_name} (Ended {e_date})")
+    print(f"Generating schedule for {week_input}...")
+    start_date, end_date = schedule[week_input]
+    scrape_week(week_input, start_date, end_date)
 
 if __name__ == "__main__":
     main()

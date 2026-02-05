@@ -66,7 +66,7 @@ def show_history_data():
         except Exception as e:
             st.error(f"Error loading file {selected_file}: {e}")
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)
 def get_league():
     """Initialize and cache the ESPN League object to avoid repeated API calls."""
     return League(league_id=LEAGUE_ID, year=SEASON_YEAR, espn_s2=ESPN_S2_TOKEN, swid=SWID_TOKEN)

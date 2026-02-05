@@ -1,65 +1,29 @@
 from datetime import datetime, timedelta
-
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+import os
+import sys
 
-cur_year = 2025
-week_start = "1/26"
-week_end = "2/1"
-pkl_file_name = "w15"
+# Import the schedule dictionary from get_week_range
+# Assuming get_week_range.py is in the same directory
+try:
+    from get_week_range import schedule
+except ImportError:
+    print("Error: get_week_range.py not found.")
+    sys.exit(1)
 
+# Team IDs (Same as before)
 team_id_dict = {
-    "ATL": 1610612737,
-    "BOS": 1610612738,
-    "BKN": 1610612751,
-    "CHA": 1610612766,
-    "CHI": 1610612741,
-    "CLE": 1610612739,
-    "DAL": 1610612742,
-    "DEN": 1610612743,
-    "DET": 1610612765,
-    "GSW": 1610612744,
-    "HOU": 1610612745,
-    "IND": 1610612754,
-    "LAC": 1610612746,
-    "LAL": 1610612747,
-    "MEM": 1610612763,
-    "MIA": 1610612748,
-    "MIL": 1610612749,
-    "MIN": 1610612750,
-    "NOP": 1610612740,
-    "NYK": 1610612752,
-    "OKC": 1610612760,
-    "ORL": 1610612753,
-    "PHI": 1610612755,
-    "PHX": 1610612756,
-    "POR": 1610612757,
-    "SAC": 1610612758,
-    "SAS": 1610612759,
-    "TOR": 1610612761,
-    "UTA": 1610612762,
-    "WSH": 1610612764,
+    "ATL": 1610612737, "BOS": 1610612738, "BKN": 1610612751, "CHA": 1610612766,
+    "CHI": 1610612741, "CLE": 1610612739, "DAL": 1610612742, "DEN": 1610612743,
+    "DET": 1610612765, "GSW": 1610612744, "HOU": 1610612745, "IND": 1610612754,
+    "LAC": 1610612746, "LAL": 1610612747, "MEM": 1610612763, "MIA": 1610612748,
+    "MIL": 1610612749, "MIN": 1610612750, "NOP": 1610612740, "NYK": 1610612752,
+    "OKC": 1610612760, "ORL": 1610612753, "PHI": 1610612755, "PHX": 1610612756,
+    "POR": 1610612757, "SAC": 1610612758, "SAS": 1610612759, "TOR": 1610612761,
+    "UTA": 1610612762, "WSH": 1610612764,
 }
-
-
-def gen_date_list(start_date_str, end_date_str):
-    start_year = cur_year if int(start_date_str.split("/")[0]) > 9 else cur_year + 1
-    end_year = cur_year if int(end_date_str.split("/")[0]) > 9 else cur_year + 1
-    start_date = datetime.strptime(f"{start_year}/{start_date_str}", "%Y/%m/%d")
-    end_date = datetime.strptime(f"{end_year}/{end_date_str}", "%Y/%m/%d")
-
-    date_list = []
-    current_date = start_date
-    while current_date <= end_date:
-        formatted_date = current_date.strftime("%b %d").replace(" 0", " ")
-        date_list.append(formatted_date)
-        current_date += timedelta(days=1)
-
-    return date_list
-
-
-date_list = gen_date_list(week_start, week_end)
 
 headers = {
     "User-Agent": (
@@ -68,29 +32,100 @@ headers = {
         "Chrome/91.0.4472.124 Safari/537.36"
     )
 }
-schedule_table = pd.DataFrame(columns=team_id_dict.keys(), index=date_list)
 
-for team_name, team_id in team_id_dict.items():
-    url = f"https://www.nba.com/team/{team_id}/schedule"
-    response = requests.get(url, headers=headers)
+def gen_date_list_from_range(start_date, end_date):
+    """Generate list of date strings formatted like 'Jan 26'."""
+    date_list = []
+    current_date = start_date
+    while current_date <= end_date:
+        # Format: "Jan 26" (Month Day)
+        # Note: NBA site uses "Jan 1" not "Jan 01", so we strip leading zero if present
+        # strftime %d is 01-31. To remove 0 on windows usually #, on linux -. 
+        # Making it platform independent string manip:
+        month = current_date.strftime("%b")
+        day = current_date.day # integer, no leading zero
+        formatted_date = f"{month} {day}"
+        date_list.append(formatted_date)
+        current_date += timedelta(days=1)
+    return date_list
 
-    if response.status_code == 200:
-        soup = BeautifulSoup(response.content, "html.parser")
+def scrape_week(week_name, start_date, end_date):
+    print(f"Scraping {week_name} ({start_date.date()} to {end_date.date()})...")
+    
+    date_list = gen_date_list_from_range(start_date, end_date)
+    schedule_table = pd.DataFrame(columns=team_id_dict.keys(), index=date_list)
+    schedule_table = schedule_table.fillna(0) # Init with 0
 
-        tbody = soup.find("tbody", class_="Crom_body__UYOcU")
+    for team_name, team_id in team_id_dict.items():
+        url = f"https://www.nba.com/team/{team_id}/schedule"
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, "html.parser")
+                # Look for the specific table body class used in previous script
+                tbody = soup.find("tbody", class_="Crom_body__UYOcU")
+                
+                if tbody:
+                    rows = tbody.find_all("tr")
+                    for row in rows:
+                        cells = row.find_all("td")
+                        if cells:
+                            cell_data = [cell.get_text(strip=True) for cell in cells]
+                            game_date_str = cell_data[0]
+                            
+                            # Check if valid date format roughly (e.g. "Mon, Oct 20") - usually NBA site has "Oct 20" or "Mon Oct 20"
+                            # The previous script looked for exact match in date_list. 
+                            # The NBA site format is typically "Day, Mon DD" or something. 
+                            # Previous script logic: cell_data[0] in date_list.
+                            # We need to ensure we match the scraped string to our date_list format.
+                            # Debug: The previous script generated date_list like "Oct 20" and checked exact match.
+                            
+                            # Let's clean the cell data to match our format "MMM D"
+                            # Attempt to find if our generated date exists in the cell string
+                            for d in date_list:
+                                if d in game_date_str:
+                                     schedule_table.loc[d, team_name] = 1
+                                     break
+                else:
+                    print(f"  Warning: Table body not found for {team_name}")
+            else:
+                 print(f"  Failed: {team_name} ({response.status_code})")
+        except Exception as e:
+            print(f"  Error {team_name}: {e}")
 
-        rows = tbody.find_all("tr")
-        for row in rows:
-            cells = row.find_all("td")
-            cell_data = [cell.get_text(strip=True) for cell in cells]
-            if cell_data[0] in date_list:
-                schedule_table.loc[cell_data[0], team_name] = 1
-    else:
-        print(
-            f"Failed to retrieve page, team: {team_name} ({team_id}), status code: {response.status_code}"
-        )
+    # Ensure output dir exists
+    out_dir = os.path.join(os.path.dirname(__file__), 'weekly_schedule')
+    os.makedirs(out_dir, exist_ok=True)
+    
+    pkl_path = os.path.join(out_dir, f"{week_name}.pkl")
+    schedule_table.to_pickle(pkl_path)
+    print(f"  Saved {pkl_path}")
+    return schedule_table
 
-schedule_table.fillna(0, inplace=True)
-schedule_table.to_pickle(f".\\weekly_schedule\\{pkl_file_name}.pkl")
-schedule_table.to_csv(f".\\weekly_schedule\\{pkl_file_name}.csv")
-print(schedule_table)
+def main():
+    # US/Pacific time for decision making
+    now_pt = pd.Timestamp.now(tz='US/Pacific')
+    today_date = now_pt.date()
+    
+    # Iterate through all weeks in schedule
+    # schedule is dict: 'w1': (start, end)
+    
+    # Sort weeks by number to process in order
+    sorted_weeks = sorted(schedule.keys(), key=lambda x: int(x[1:]))
+    
+    for week_name in sorted_weeks:
+        start_date, end_date = schedule[week_name]
+        
+        # Convert pandas timestamps to date
+        s_date = start_date.date()
+        e_date = end_date.date()
+        
+        # Process if the week ends today or in the future
+        # (This ensures we update the current running week + all future weeks)
+        if e_date >= today_date:
+            scrape_week(week_name, start_date, end_date)
+        else:
+            print(f"Skipping {week_name} (Ended {e_date})")
+
+if __name__ == "__main__":
+    main()

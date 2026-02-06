@@ -294,7 +294,10 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
     st.session_state[last_known_key] = full_df.copy()
 
     # Rerun if programmatic change occurred to update UI
-    if cols_changed:
+    # Rerun if any change occurred to update UI and prevent reset
+    if not edited_df.equals(df_visible) or cols_changed:
+        st.session_state[ss_key] = full_df
+        st.session_state[last_known_key] = full_df.copy()
         st.rerun()
 
     # Enforce No-Game Constraint (Active Reversion)
@@ -484,7 +487,7 @@ def show_matchup_results():
                     st.markdown("---")
                     st.subheader("Prediction Calculator")
                     st.caption(
-                        "選取未來預計會進行的比賽，預計不會上場的請取消勾選。\n\n數據更新時間為美西時間午夜12點。(16:00 UTC+8)\n\n另外有時候按第一次框框會沒反應，請再按一次!"
+                        "選取未來預計會進行的比賽，預計不會上場的請取消勾選。\n\n數據更新時間為美西時間午夜12點。(16:00 UTC+8)"
                     )
 
                     # Load Stats for Projections

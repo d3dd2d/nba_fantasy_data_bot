@@ -363,15 +363,26 @@ def show_matchup_results():
             team_map = {team.team_name: team for team in teams}
             team_names = list(team_map.keys())
 
-            col1, col2 = st.columns(2)
-            with col1:
-                selected_team1 = st.selectbox("Select Team 1:", team_names, index=0)
-            with col2:
-                # Default to second team if possible
-                default_idx = 1 if len(team_names) > 1 else 0
-                selected_team2 = st.selectbox(
-                    "Select Team 2:", team_names, index=default_idx
-                )
+            # Layout: Two rows of radio buttons
+            st.write("### Team 1")
+            selected_team1 = st.radio(
+                "Select Team 1:",
+                team_names,
+                index=0,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+            st.write("### Team 2")
+            # Default to second team if possible
+            default_idx = 1 if len(team_names) > 1 else 0
+            selected_team2 = st.radio(
+                "Select Team 2:",
+                team_names,
+                index=default_idx,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
 
             if selected_team1 and selected_team2:
                 # 3. Fetch Matchups (Box Scores)

@@ -1,21 +1,19 @@
 import os
-from datetime import datetime
-
 import pandas as pd
 import streamlit as st
 from espn_api.basketball import League
-from unidecode import unidecode
 
 from get_week_range import find_week_range
 from utils import (
-    NAME_MAPPING,
     TEAM_ABBREVIATION_MAPPING,
     apply_batch_toggle,
     calculate_projected_stats,
     enforce_no_game_constraints,
-    get_player_avg,
+    filter_future_columns,
     get_player_stats_map,
     get_team_schedule_data,
+    prepare_comparison_data,
+    prepare_roster_data,
 )
 
 # Constants for ESPN API (Loaded from secrets)
@@ -113,43 +111,9 @@ def show_team_rosters():
             )
 
             # Prepare roster data
-            roster_data = []
-            for player in team.roster:
-                # 1. Base Roster Info
-                player_info = {
-                    "Name": player.name,
-                }
+            df_roster = prepare_roster_data(team, stats_map)
 
-                # 2. Resolve Name for Stats Lookup
-                # First, check manual mapping (using original name, stripped)
-                lookup_name = player.name.strip()
-                if lookup_name in NAME_MAPPING:
-                    lookup_name = NAME_MAPPING[lookup_name]
-
-                # Next, normalize for matching (unidecode, lower case)
-                lookup_key = unidecode(lookup_name).lower().strip()
-
-                # 3. Merge Stats
-                if lookup_key in stats_map:
-                    stats = stats_map[lookup_key]
-                    # Exclude the 'PLAYER' and 'TEAM' columns from stats as we have them or don't need them duplicated
-                    for key, value in stats.items():
-                        if key not in ["PLAYER", "TEAM"]:
-                            player_info[key] = value
-                else:
-                    # Fill 0 for missing players (columns from the dataframe if available, else standard set)
-                    if stats_map:
-                        example_stats = next(iter(stats_map.values()))
-                        for key in example_stats:
-                            if key not in ["PLAYER", "TEAM"]:
-                                player_info[key] = 0
-                    else:
-                        player_info["Stats"] = "N/A"
-
-                roster_data.append(player_info)
-
-            if roster_data:
-                df_roster = pd.DataFrame(roster_data)
+            if not df_roster.empty:
                 st.dataframe(df_roster, width="stretch")
             else:
                 st.info("This team has no players on the roster.")
@@ -213,39 +177,9 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
     height = (n_rows + 1) * 35 + 3
 
     # Filter Columns: Hide Past Dates
-    # Current PT Date
-    now_pt = pd.Timestamp.now(tz="US/Pacific")
-    current_date = now_pt.date()
-
-    # Identify columns to show
-    all_cols = st.session_state[ss_key].columns
-    date_cols = [c for c in all_cols if c not in ["Player", "Pos", "Team"]]
-
-    future_cols = []
-    for d_str in date_cols:
-        try:
-            # Parse header "Jan 26". Assume SEASON_YEAR logic.
-            # Split month/day
-            parts = d_str.split()
-            if len(parts) == 2:
-                month_str, day_str = parts
-                # Simple mapping or datetime parse
-                # 2026 Season: Oct-Dec=2025, Jan-Apr=2026
-                dt_temp = datetime.strptime(d_str, "%b %d")
-
-                # Determine Year
-                if dt_temp.month >= 10:
-                    year = SEASON_YEAR - 1
-                else:
-                    year = SEASON_YEAR
-
-                col_date = dt_temp.replace(year=year).date()
-
-                if col_date >= current_date:
-                    future_cols.append(d_str)
-        except:
-            # If parse fails, keep it to be safe
-            future_cols.append(d_str)
+    future_cols = filter_future_columns(
+        st.session_state[ss_key].columns, current_date=None, season_year=SEASON_YEAR
+    )
 
     # Define visible dataframe
     visible_cols = ["Player", "Team"] + future_cols
@@ -312,7 +246,6 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
         st.session_state[version_key] += 1
 
         st.toast("Cannot verify game: No game scheduled for this day.", icon="🚫")
-        st.rerun()
         st.rerun()
 
     return edited_df
@@ -445,38 +378,8 @@ def show_matchup_results():
                     aliases = {"TREB": "REB"}
 
                     # Build Comparison Table
-                    t1_row = {}
-                    t2_row = {}
-
-                    for display_key in desired_order:
-                        # Determine API key
-                        api_key = display_key
-                        if display_key not in available_keys and display_key in aliases:
-                            if aliases[display_key] in available_keys:
-                                api_key = aliases[display_key]
-
-                        # Fetch values (Handle None stats if future week)
-                        t1_val = (
-                            t1_stats.get(api_key, {}).get("value", 0) if t1_stats else 0
-                        )
-                        t2_val = (
-                            t2_stats.get(api_key, {}).get("value", 0) if t2_stats else 0
-                        )
-
-                        # Format values
-                        if display_key in ["AFG%", "FT%"]:
-                            t1_display = f"{t1_val * 100:.2f}%"
-                            t2_display = f"{t2_val * 100:.2f}%"
-                        else:
-                            t1_display = f"{int(t1_val)}"
-                            t2_display = f"{int(t2_val)}"
-
-                        t1_row[display_key] = t1_display
-                        t2_row[display_key] = t2_display
-
-                    # Create DataFrame
-                    df_matchup = pd.DataFrame(
-                        [t1_row, t2_row], index=[t1_obj.team_name, t2_obj.team_name]
+                    df_matchup = prepare_comparison_data(
+                        t1_obj, t1_stats, t2_obj, t2_stats, desired_order, aliases
                     )
                     st.table(df_matchup)
 

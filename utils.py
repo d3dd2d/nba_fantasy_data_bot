@@ -200,3 +200,114 @@ def enforce_no_game_constraints(edited_df, schedule_df):
                     changed = True
 
     return edited_df, changed
+
+
+from datetime import datetime
+
+
+def filter_future_columns(all_cols, current_date=None, season_year=2025):
+    """
+    Filter columns to show only future dates based on current_date.
+    Returns list of column names.
+    """
+    if current_date is None:
+        now_pt = pd.Timestamp.now(tz="US/Pacific")
+        current_date = now_pt.date()
+
+    date_cols = [c for c in all_cols if c not in ["Player", "Pos", "Team"]]
+    future_cols = []
+
+    for d_str in date_cols:
+        try:
+            # Parse header "Jan 26"
+            parts = d_str.split()
+            if len(parts) == 2:
+                month_str, day_str = parts
+                dt_temp = datetime.strptime(d_str, "%b %d")
+
+                # Determine Year
+                if dt_temp.month >= 10:
+                    year = season_year - 1
+                else:
+                    year = season_year
+
+                col_date = dt_temp.replace(year=year).date()
+
+                if col_date >= current_date:
+                    future_cols.append(d_str)
+        except:
+            future_cols.append(d_str)
+
+    return future_cols
+
+
+def prepare_comparison_data(t1_obj, t1_stats, t2_obj, t2_stats, desired_order, aliases):
+    """
+    Build a comparison DataFrame for two teams.
+    """
+    available_keys = list(t1_stats.keys()) if t1_stats else []
+
+    t1_row = {}
+    t2_row = {}
+
+    for display_key in desired_order:
+        # Determine API key
+        api_key = display_key
+        if display_key not in available_keys and display_key in aliases:
+            if aliases[display_key] in available_keys:
+                api_key = aliases[display_key]
+
+        # Fetch values
+        t1_val = t1_stats.get(api_key, {}).get("value", 0) if t1_stats else 0
+        t2_val = t2_stats.get(api_key, {}).get("value", 0) if t2_stats else 0
+
+        # Format values
+        if display_key in ["AFG%", "FT%"]:
+            t1_display = f"{t1_val * 100:.2f}%"
+            t2_display = f"{t2_val * 100:.2f}%"
+        else:
+            t1_display = f"{int(t1_val)}"
+            t2_display = f"{int(t2_val)}"
+
+        t1_row[display_key] = t1_display
+        t2_row[display_key] = t2_display
+
+    # Create DataFrame
+    df_matchup = pd.DataFrame(
+        [t1_row, t2_row], index=[t1_obj.team_name, t2_obj.team_name]
+    )
+    return df_matchup
+
+
+def prepare_roster_data(team, stats_map):
+    """
+    Build roster dataframe for a team.
+    """
+    roster_data = []
+    for player in team.roster:
+        player_info = {"Name": player.name}
+
+        # Resolve Name
+        lookup_name = player.name.strip()
+        if lookup_name in NAME_MAPPING:
+            lookup_name = NAME_MAPPING[lookup_name]
+        lookup_key = unidecode(lookup_name).lower().strip()
+
+        # Merge Stats
+        if lookup_key in stats_map:
+            stats = stats_map[lookup_key]
+            for key, value in stats.items():
+                if key not in ["PLAYER", "TEAM"]:
+                    player_info[key] = value
+        else:
+            if stats_map:
+                example_stats = next(iter(stats_map.values()))
+                for key in example_stats:
+                    if key not in ["PLAYER", "TEAM"]:
+                        player_info[key] = 0
+            else:
+                player_info["Stats"] = "N/A"
+
+        roster_data.append(player_info)
+
+    return pd.DataFrame(roster_data) if roster_data else pd.DataFrame()

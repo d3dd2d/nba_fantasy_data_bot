@@ -311,3 +311,59 @@ def prepare_roster_data(team, stats_map):
         roster_data.append(player_info)
 
     return pd.DataFrame(roster_data) if roster_data else pd.DataFrame()
+
+
+def calculate_projected_stats_simple(
+    team_obj, schedule_df, stats_map, desired_order, alias_mapping
+):
+    """
+    Calculate projected stats for a team without interactive editing.
+    All non-OUT players are assumed to play all scheduled games.
+    Returns a dict of raw numeric values (not formatted strings).
+    """
+    base_totals = {k: 0.0 for k in desired_order if k not in ["AFG%", "FT%"]}
+
+    if schedule_df is None:
+        return base_totals
+
+    dates = schedule_df.index.tolist()
+
+    for player in team_obj.roster:
+        # Skip OUT players
+        if player.injuryStatus == "OUT":
+            continue
+
+        pro_team = player.proTeam
+        sched_col = TEAM_ABBREVIATION_MAPPING.get(pro_team, pro_team)
+
+        # Count games
+        games_active = 0
+        if sched_col in schedule_df.columns:
+            for d in dates:
+                if schedule_df.loc[d, sched_col] == 1:
+                    games_active += 1
+
+        if games_active > 0:
+            p_stats = get_player_avg(player.name, stats_map)
+            if p_stats:
+                for k in base_totals:
+                    val = 0.0
+                    # Check alias mapping
+                    if k in p_stats:
+                        val = float(p_stats[k])
+                    elif k in alias_mapping and alias_mapping[k] in p_stats:
+                        val = float(p_stats[alias_mapping[k]])
+                    base_totals[k] += val * games_active
+
+    # Compute derived stats
+    fgm = base_totals.get("FGM", 0)
+    fga = base_totals.get("FGA", 0)
+    threepm = base_totals.get("3PM", 0)
+    ftm = base_totals.get("FTM", 0)
+    fta = base_totals.get("FTA", 0)
+
+    result = dict(base_totals)
+    result["AFG%"] = (fgm + 0.5 * threepm) / fga if fga > 0 else 0.0
+    result["FT%"] = ftm / fta if fta > 0 else 0.0
+
+    return result

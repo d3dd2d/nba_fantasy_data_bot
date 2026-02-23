@@ -8,6 +8,7 @@ from utils import (
     TEAM_ABBREVIATION_MAPPING,
     apply_batch_toggle,
     calculate_projected_stats,
+    calculate_projected_stats_simple,
     enforce_no_game_constraints,
     filter_future_columns,
     get_player_stats_map,
@@ -467,13 +468,223 @@ def show_matchup_results():
         st.error(f"Error fetching matchup data: {e}")
 
 
+def show_team_strength():
+    st.header("Team Strength Evaluation")
+    st.caption("預測你的隊伍在未來每週對上所有隊伍的表現")
+
+    # Stat categories
+    desired_order = [
+        "AFG%",
+        "FT%",
+        "3PM",
+        "TREB",
+        "AST",
+        "STL",
+        "BLK",
+        "TO",
+        "PTS",
+        "FGM",
+        "FGA",
+        "FTM",
+        "FTA",
+    ]
+    aliases = {"TREB": "REB"}
+    # TO is "lower is better"
+    lower_is_better = {"TO"}
+
+    # Stats source
+    stats_options = {"2026 stat.": "current_1.pkl", "2026 proj.": "current_0.pkl"}
+    selected_label = st.selectbox(
+        "Select Stats Source:", list(stats_options.keys()), key="strength_stats"
+    )
+    stats_file = stats_options[selected_label]
+
+    try:
+        league = get_league()
+        teams = league.teams
+        if not teams:
+            st.warning("No teams found.")
+            return
+
+        team_map = {team.team_name: team for team in teams}
+        team_names = list(team_map.keys())
+
+        # Select target team
+        st.write("### Select Your Team")
+        target_team_name = st.radio(
+            "Target Team:",
+            team_names,
+            index=0,
+            horizontal=True,
+            label_visibility="collapsed",
+            key="strength_target",
+        )
+        target_team = team_map[target_team_name]
+
+        # Load stats
+        stats_map = get_player_stats_map(os.path.dirname(__file__), stats_file)
+
+        # Get available future weeks (w18+)
+        weeks = get_available_weeks()
+        future_weeks = [w for w in weeks if int(w[1:]) >= 18]
+
+        if not future_weeks:
+            st.warning("No schedule files found for w18 onwards.")
+            return
+
+        # Process each week
+        for week_str in future_weeks:
+            week_num = int(week_str[1:])
+            schedule_path = os.path.join(
+                os.path.dirname(__file__), "weekly_schedule", f"{week_str}.pkl"
+            )
+            if not os.path.exists(schedule_path):
+                continue
+
+            df_schedule = pd.read_pickle(schedule_path)
+
+            st.markdown("---")
+            st.subheader(f"Week {week_num}")
+
+            # Calculate target team stats
+            target_stats = calculate_projected_stats_simple(
+                target_team, df_schedule, stats_map, desired_order, aliases
+            )
+
+            # Build rows: first row = target team (reference), then each opponent
+            rows = []
+
+            # Target team reference row
+            target_row = {"Team": f"⭐ {target_team_name}"}
+            for k in desired_order:
+                val = target_stats.get(k, 0)
+                if k in ["AFG%", "FT%"]:
+                    target_row[k] = round(val * 100, 2)
+                else:
+                    target_row[k] = round(val, 1)
+            target_row["Wins"] = "-"
+            rows.append(target_row)
+
+            # Opponent rows
+            for opp_name in team_names:
+                if opp_name == target_team_name:
+                    continue
+                opp_team = team_map[opp_name]
+                opp_stats = calculate_projected_stats_simple(
+                    opp_team, df_schedule, stats_map, desired_order, aliases
+                )
+
+                opp_row = {"Team": opp_name}
+                wins = 0
+                skip_for_wins = {"FGM", "FGA", "FTM", "FTA"}
+                for k in desired_order:
+                    t_val = target_stats.get(k, 0)
+                    o_val = opp_stats.get(k, 0)
+                    if k in ["AFG%", "FT%"]:
+                        opp_row[k] = round(o_val * 100, 2)
+                    else:
+                        opp_row[k] = round(o_val, 1)
+
+                    # Don't count hidden columns in wins
+                    if k in skip_for_wins:
+                        continue
+
+                    # Determine win/loss for target team
+                    if k in lower_is_better:
+                        if t_val < o_val:
+                            wins += 1
+                    else:
+                        if t_val > o_val:
+                            wins += 1
+                opp_row["Wins"] = str(wins)
+                rows.append(opp_row)
+
+            df_result = pd.DataFrame(rows)
+            df_result = df_result.set_index("Team")
+
+            # Hide detailed columns
+            hide_cols = ["FGM", "FGA", "FTM", "FTA"]
+            df_result = df_result.drop(
+                columns=[c for c in hide_cols if c in df_result.columns]
+            )
+
+            # Apply styling: color cells based on W/L vs target
+            def color_cells(df):
+                styles = pd.DataFrame("", index=df.index, columns=df.columns)
+                target_vals = df.iloc[0]  # Reference row
+
+                for idx in df.index[1:]:  # Skip target row
+                    for col in desired_order:
+                        if col not in df.columns:
+                            continue
+                        t_val = target_vals[col]
+                        o_val = df.at[idx, col]
+                        try:
+                            t_val = float(t_val)
+                            o_val = float(o_val)
+                        except (ValueError, TypeError):
+                            continue
+
+                        if col in lower_is_better:
+                            if t_val < o_val:
+                                styles.at[idx, col] = (
+                                    "background-color: #2d6a2d; color: white"
+                                )
+                            elif t_val > o_val:
+                                styles.at[idx, col] = (
+                                    "background-color: #8b2020; color: white"
+                                )
+                        else:
+                            if t_val > o_val:
+                                styles.at[idx, col] = (
+                                    "background-color: #2d6a2d; color: white"
+                                )
+                            elif t_val < o_val:
+                                styles.at[idx, col] = (
+                                    "background-color: #8b2020; color: white"
+                                )
+
+                # Style the Wins column
+                if "Wins" in df.columns:
+                    for idx in df.index[1:]:
+                        val = df.at[idx, "Wins"]
+                        try:
+                            wins_val = int(val)
+                            total = len(desired_order)
+                            if wins_val > total / 2:
+                                styles.at[idx, "Wins"] = (
+                                    "background-color: #8b2020; color: white"
+                                )
+                            elif wins_val < total / 2:
+                                styles.at[idx, "Wins"] = (
+                                    "background-color: #2d6a2d; color: white"
+                                )
+                        except (ValueError, TypeError):
+                            pass
+
+                # Style target row (bold)
+                for col in styles.columns:
+                    styles.loc[styles.index[0], col] = (
+                        "font-weight: bold; background-color: #1a3a5c; color: white"
+                    )
+
+                return styles
+
+            styled_df = df_result.style.apply(color_cells, axis=None)
+            st.dataframe(styled_df, width="stretch")
+
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+
 def main():
     st.set_page_config(page_title="Fantasy Data Bot", layout="wide")
     st.title("Cubist Fantasy")
 
     # Sidebar Navigation
     page = st.sidebar.radio(
-        "Navigation", ["Matchup Results", "History Data", "Team Rosters"]
+        "Navigation",
+        ["Matchup Results", "Team Strength", "History Data", "Team Rosters"],
     )
 
     if page == "History Data":
@@ -482,6 +693,8 @@ def main():
         show_team_rosters()
     elif page == "Matchup Results":
         show_matchup_results()
+    elif page == "Team Strength":
+        show_team_strength()
 
 
 if __name__ == "__main__":

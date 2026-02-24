@@ -7,10 +7,12 @@ from get_week_range import find_week_range
 from utils import (
     TEAM_ABBREVIATION_MAPPING,
     apply_batch_toggle,
+    build_added_player_schedule_rows,
     calculate_projected_stats,
     calculate_projected_stats_simple,
     enforce_no_game_constraints,
     filter_future_columns,
+    get_all_player_names,
     get_player_stats_map,
     get_team_schedule_data,
     prepare_comparison_data,
@@ -137,7 +139,9 @@ def get_available_weeks():
     return [f[:-4] for f in files]  # Return ['w1', 'w2'...]
 
 
-def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
+def render_team_schedule_ui(
+    team_obj, week_num, df_schedule, side_key, added_players=None, stats_map=None
+):
     """
     Render schedule table for a team (Home/Away).
     Handles session state initialization, 'Daily Status' row logic, and updating.
@@ -150,8 +154,17 @@ def render_team_schedule_ui(team_obj, week_num, df_schedule, side_key):
     if df_sched.empty:
         return pd.DataFrame()  # Empty if no data
 
-    # Sesson State Key
-    ss_key = f"df_{side_key}_{week_num}_{team_obj.team_name}"
+    # Append added players
+    if added_players and stats_map and df_schedule is not None:
+        df_added = build_added_player_schedule_rows(
+            added_players, stats_map, df_schedule
+        )
+        if not df_added.empty:
+            df_sched = pd.concat([df_sched, df_added], ignore_index=True)
+
+    # Session State Key — include added players hash so state resets on change
+    added_hash = hash(tuple(added_players)) if added_players else 0
+    ss_key = f"df_{side_key}_{week_num}_{team_obj.team_name}_{added_hash}"
 
     if ss_key not in st.session_state:
         # Initialize with Daily Status Row
@@ -420,14 +433,42 @@ def show_matchup_results():
                     else:
                         st.warning(f"Schedule file not found for Week {week_num}")
 
-                    # --- Process Teams (Unified Helper) ---
-                    # Use unique keys for editors since teams can change
-                    edited_t1_df = render_team_schedule_ui(
-                        t1_obj, week_num, df_schedule, "team1"
+                    # --- Add Players + Schedule Tables ---
+                    all_player_names = get_all_player_names(stats_map)
+
+                    # Team 1: table first, multiselect below
+                    t1_container = st.container()
+                    added_t1 = st.multiselect(
+                        f"Add players to {t1_obj.team_name}:",
+                        all_player_names,
+                        key="add_players_t1",
                     )
-                    edited_t2_df = render_team_schedule_ui(
-                        t2_obj, week_num, df_schedule, "team2"
+                    with t1_container:
+                        edited_t1_df = render_team_schedule_ui(
+                            t1_obj,
+                            week_num,
+                            df_schedule,
+                            "team1",
+                            added_players=added_t1,
+                            stats_map=stats_map,
+                        )
+
+                    # Team 2: table first, multiselect below
+                    t2_container = st.container()
+                    added_t2 = st.multiselect(
+                        f"Add players to {t2_obj.team_name}:",
+                        all_player_names,
+                        key="add_players_t2",
                     )
+                    with t2_container:
+                        edited_t2_df = render_team_schedule_ui(
+                            t2_obj,
+                            week_num,
+                            df_schedule,
+                            "team2",
+                            added_players=added_t2,
+                            stats_map=stats_map,
+                        )
 
                     # --- Calculate Predictions ---
                     t1_proj = calculate_projected_stats(

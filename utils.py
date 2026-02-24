@@ -45,6 +45,50 @@ def get_player_stats_map(base_dir, filename):
         return {}
 
 
+def get_all_player_names(stats_map):
+    """Return sorted list of original player names from stats map."""
+    names = []
+    for key, row in stats_map.items():
+        if "PLAYER" in row:
+            names.append(row["PLAYER"])
+    names.sort()
+    return names
+
+
+def build_added_player_schedule_rows(player_names, stats_map, schedule_df):
+    """
+    Build schedule DataFrame rows for added players.
+    Uses their TEAM from stats to determine game days.
+    Returns a DataFrame with same structure as get_team_schedule_data output.
+    """
+    if schedule_df is None:
+        return pd.DataFrame()
+
+    dates = schedule_df.index.tolist()
+    rows = []
+    for p_name in player_names:
+        p_stats = get_player_avg(p_name, stats_map)
+        if not p_stats:
+            continue
+
+        # Get the player's real NBA team
+        pro_team = p_stats.get("TEAM", "")
+        sched_col = TEAM_ABBREVIATION_MAPPING.get(pro_team, pro_team)
+
+        row = {"Player": p_name, "Pos": "ADD", "Team": pro_team}
+        for date in dates:
+            if (
+                sched_col in schedule_df.columns
+                and schedule_df.loc[date, sched_col] == 1
+            ):
+                row[date] = True
+            else:
+                row[date] = None
+        rows.append(row)
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
 def get_player_avg(player_name, s_map):
     lookup_name = player_name.strip()
     if lookup_name in NAME_MAPPING:

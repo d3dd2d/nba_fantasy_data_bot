@@ -154,17 +154,9 @@ def render_team_schedule_ui(
     if df_sched.empty:
         return pd.DataFrame()  # Empty if no data
 
-    # Append added players
-    if added_players and stats_map and df_schedule is not None:
-        df_added = build_added_player_schedule_rows(
-            added_players, stats_map, df_schedule
-        )
-        if not df_added.empty:
-            df_sched = pd.concat([df_sched, df_added], ignore_index=True)
-
-    # Session State Key — include added players hash so state resets on change
-    added_hash = hash(tuple(added_players)) if added_players else 0
-    ss_key = f"df_{side_key}_{week_num}_{team_obj.team_name}_{added_hash}"
+    # Stable Session State Key (no hash — we merge changes incrementally)
+    ss_key = f"df_{side_key}_{week_num}_{team_obj.team_name}"
+    added_key = f"added_{ss_key}"  # Track which players were previously added
 
     if ss_key not in st.session_state:
         # Initialize with Daily Status Row
@@ -175,6 +167,28 @@ def render_team_schedule_ui(
 
         df_final = pd.concat([pd.DataFrame([status_row]), df_sched], ignore_index=True)
         st.session_state[ss_key] = df_final
+        st.session_state[added_key] = []
+
+    # Sync added players: remove old, append new
+    current_added = list(added_players) if added_players else []
+    prev_added = st.session_state.get(added_key, [])
+
+    if current_added != prev_added:
+        full_df = st.session_state[ss_key]
+
+        # Remove previously added players (Pos == "ADD")
+        full_df = full_df[full_df["Pos"] != "ADD"].reset_index(drop=True)
+
+        # Append new added players
+        if current_added and stats_map and df_schedule is not None:
+            df_added = build_added_player_schedule_rows(
+                current_added, stats_map, df_schedule
+            )
+            if not df_added.empty:
+                full_df = pd.concat([full_df, df_added], ignore_index=True)
+
+        st.session_state[ss_key] = full_df
+        st.session_state[added_key] = current_added
 
     # Last Known State (Shadow Copy) for diffing
     last_known_key = f"last_{ss_key}"

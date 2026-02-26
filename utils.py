@@ -5,7 +5,11 @@ import streamlit as st
 from unidecode import unidecode
 
 # Manual name mappings
-NAME_MAPPING = {"Alex Sarr": "Alexandre Sarr", "Nic Claxton": "Nicolas Claxton"}
+NAME_MAPPING = {
+    "Alex Sarr": "Alexandre Sarr",
+    "Nic Claxton": "Nicolas Claxton",
+    "GG Jackson": "GG Jackson II",
+}
 
 # Team Mapping (Inverted)
 TEAM_ABBREVIATION_MAPPING = {
@@ -358,11 +362,12 @@ def prepare_roster_data(team, stats_map):
 
 
 def calculate_projected_stats_simple(
-    team_obj, schedule_df, stats_map, desired_order, alias_mapping
+    team_obj, schedule_df, stats_map, desired_order, alias_mapping, active_players=None
 ):
     """
     Calculate projected stats for a team without interactive editing.
     All non-OUT players are assumed to play all scheduled games.
+    If active_players is provided, only those players are included.
     Returns a dict of raw numeric values (not formatted strings).
     """
     base_totals = {k: 0.0 for k in desired_order if k not in ["AFG%", "FT%"]}
@@ -373,9 +378,13 @@ def calculate_projected_stats_simple(
     dates = schedule_df.index.tolist()
 
     for player in team_obj.roster:
-        # Skip OUT players
-        if player.injuryStatus == "OUT":
-            continue
+        # Skip OUT players (unless explicitly selected via active_players)
+        if active_players is not None:
+            if player.name not in active_players:
+                continue
+        else:
+            if player.injuryStatus == "OUT":
+                continue
 
         pro_team = player.proTeam
         sched_col = TEAM_ABBREVIATION_MAPPING.get(pro_team, pro_team)
@@ -393,6 +402,31 @@ def calculate_projected_stats_simple(
                 for k in base_totals:
                     val = 0.0
                     # Check alias mapping
+                    if k in p_stats:
+                        val = float(p_stats[k])
+                    elif k in alias_mapping and alias_mapping[k] in p_stats:
+                        val = float(p_stats[alias_mapping[k]])
+                    base_totals[k] += val * games_active
+
+    # Process non-roster players (added from league pool)
+    if active_players is not None:
+        roster_names = {p.name for p in team_obj.roster}
+        for p_name in active_players:
+            if p_name in roster_names:
+                continue  # Already processed above
+            p_stats = get_player_avg(p_name, stats_map)
+            if not p_stats:
+                continue
+            pro_team = p_stats.get("TEAM", "")
+            sched_col = TEAM_ABBREVIATION_MAPPING.get(pro_team, pro_team)
+            games_active = 0
+            if sched_col in schedule_df.columns:
+                for d in dates:
+                    if schedule_df.loc[d, sched_col] == 1:
+                        games_active += 1
+            if games_active > 0:
+                for k in base_totals:
+                    val = 0.0
                     if k in p_stats:
                         val = float(p_stats[k])
                     elif k in alias_mapping and alias_mapping[k] in p_stats:

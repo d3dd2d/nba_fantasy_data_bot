@@ -13,6 +13,7 @@ from utils import (
     enforce_no_game_constraints,
     filter_future_columns,
     get_all_player_names,
+    get_player_avg,
     get_player_stats_map,
     get_team_schedule_data,
     prepare_comparison_data,
@@ -527,6 +528,18 @@ def show_team_strength():
     st.header("Team Strength Evaluation")
     st.caption("預測你的隊伍在未來每週對上所有隊伍的表現")
 
+    # Custom CSS for player tag colors
+    st.markdown(
+        """
+    <style>
+    span[data-baseweb="tag"] {
+        background-color: rgba(128, 128, 128, 0.25) !important;
+    }
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+
     # Stat categories
     desired_order = [
         "AFG%",
@@ -579,9 +592,43 @@ def show_team_strength():
         # Load stats
         stats_map = get_player_stats_map(os.path.dirname(__file__), stats_file)
 
-        # Get available future weeks (w18+)
+        # --- Player Selection per Team ---
+        st.markdown("---")
+        st.subheader("Active Players")
+        st.caption("選擇每支隊伍要計入預測的球員。預設為非傷兵且有數據的球員。")
+
+        all_league_players = get_all_player_names(stats_map)
+
+        team_active_players = {}
+        for t_name in team_names:
+            team = team_map[t_name]
+            is_target = t_name == target_team_name
+
+            # Build default selection: non-OUT roster players that have stats
+            roster_names = [p.name for p in team.roster]
+            default_selected = []
+            for p in team.roster:
+                if p.injuryStatus == "OUT":
+                    continue
+                p_stats = get_player_avg(p.name, stats_map)
+                if p_stats:
+                    default_selected.append(p.name)
+
+            # Options: roster first, then all other league players
+            other_players = [n for n in all_league_players if n not in roster_names]
+            all_options = roster_names + other_players
+
+            selected = st.multiselect(
+                f"{'⭐ ' if is_target else ''}{t_name}",
+                all_options,
+                default=default_selected,
+                key=f"strength_players_{t_name}",
+            )
+            team_active_players[t_name] = selected
+
+        # Get available future weeks (w19+)
         weeks = get_available_weeks()
-        future_weeks = [w for w in weeks if int(w[1:]) >= 18]
+        future_weeks = [w for w in weeks if int(w[1:]) >= 19]
 
         if not future_weeks:
             st.warning("No schedule files found for w18 onwards.")
@@ -603,7 +650,12 @@ def show_team_strength():
 
             # Calculate target team stats
             target_stats = calculate_projected_stats_simple(
-                target_team, df_schedule, stats_map, desired_order, aliases
+                target_team,
+                df_schedule,
+                stats_map,
+                desired_order,
+                aliases,
+                active_players=team_active_players.get(target_team_name),
             )
 
             # Build rows: first row = target team (reference), then each opponent
@@ -626,7 +678,12 @@ def show_team_strength():
                     continue
                 opp_team = team_map[opp_name]
                 opp_stats = calculate_projected_stats_simple(
-                    opp_team, df_schedule, stats_map, desired_order, aliases
+                    opp_team,
+                    df_schedule,
+                    stats_map,
+                    desired_order,
+                    aliases,
+                    active_players=team_active_players.get(opp_name),
                 )
 
                 opp_row = {"Team": opp_name}

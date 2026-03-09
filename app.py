@@ -356,9 +356,15 @@ def show_matchup_results():
                 # Helper to find team data in box scores
                 def get_team_data_from_box_scores(t_name, b_scores):
                     for matchup in b_scores:
-                        if matchup.home_team.team_name == t_name:
+                        if (
+                            matchup.home_team != 0
+                            and matchup.home_team.team_name == t_name
+                        ):
                             return matchup.home_team, matchup.home_stats
-                        if matchup.away_team.team_name == t_name:
+                        if (
+                            matchup.away_team != 0
+                            and matchup.away_team.team_name == t_name
+                        ):
                             return matchup.away_team, matchup.away_stats
                     return None, None
 

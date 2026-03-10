@@ -436,7 +436,7 @@ def show_matchup_results():
                     st.markdown("---")
                     st.subheader("Prediction Calculator")
                     st.caption(
-                        "選取未來預計會進行的比賽，預計不會上場的請取消勾選。\n\n數據更新時間為美西時間午夜12點。(16:00 UTC+8)"
+                        "選取未來預計會進行的比賽，預計不會上場的請取消勾選。\n\n數據更新時間為美西時間午夜12點。(15:00 UTC+8)"
                     )
 
                     # Load Stats for Projections

@@ -259,7 +259,7 @@ def filter_future_columns(all_cols, current_date=None, season_year=2025):
     Returns list of column names.
     """
     if current_date is None:
-        now_pt = pd.Timestamp.now(tz="US/Pacific")
+        now_pt = pd.Timestamp.now(tz="America/Los_Angeles")
         current_date = now_pt.date()
 
     date_cols = [c for c in all_cols if c not in ["Player", "Pos", "Team"]]

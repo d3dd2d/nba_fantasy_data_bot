@@ -290,7 +290,7 @@ def show_matchup_results():
         return
 
     # Calculate Current PT Date & Defaults
-    now_pt = pd.Timestamp.now(tz="US/Pacific")
+    now_pt = pd.Timestamp.now(tz="America/Los_Angeles")
     current_date = now_pt.date()
     season_start = pd.Timestamp("2025-10-20").date()
 
